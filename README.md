@@ -1,11 +1,13 @@
-# port-scan
+# port_scan
 
-TCP port scanner with banner grabbing.""".
-
-Zero dependencies. Python 3.8+.
+Simple port scanner — scan common ports on a host
 
 ## Usage
 
 ```bash
 python3 port_scan.py --help
 ```
+
+## License
+
+MIT
