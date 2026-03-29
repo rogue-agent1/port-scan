@@ -1,6 +1,6 @@
-# port_scan
+# port-scan
 
-Simple port scanner — scan common ports on a host
+Simple TCP port scanner
 
 ## Usage
 
@@ -8,6 +8,7 @@ Simple port scanner — scan common ports on a host
 python3 port_scan.py --help
 ```
 
-## License
+## Features
 
-MIT
+- Zero dependencies (Python 3.8+)
+- Single file implementation

@@ -1,26 +1,46 @@
 #!/usr/bin/env python3
-"""Port scanner — check open ports on a target host."""
-import sys, socket
-COMMON = {21:"FTP",22:"SSH",23:"Telnet",25:"SMTP",53:"DNS",80:"HTTP",110:"POP3",143:"IMAP",443:"HTTPS",445:"SMB",993:"IMAPS",995:"POP3S",3306:"MySQL",5432:"PostgreSQL",6379:"Redis",8080:"HTTP-Alt",8443:"HTTPS-Alt",27017:"MongoDB"}
-def scan(host, ports, timeout=1):
+"""port_scan - TCP port scanner."""
+import sys, argparse, json, socket, concurrent.futures, time
+
+COMMON_PORTS = {21:"FTP",22:"SSH",23:"Telnet",25:"SMTP",53:"DNS",80:"HTTP",110:"POP3",143:"IMAP",443:"HTTPS",993:"IMAPS",995:"POP3S",3306:"MySQL",5432:"PostgreSQL",6379:"Redis",8080:"HTTP-Alt",8443:"HTTPS-Alt",27017:"MongoDB"}
+
+def scan_port(host, port, timeout=1):
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return port, result == 0
+    except:
+        return port, False
+
+def main():
+    p = argparse.ArgumentParser(description="Port scanner")
+    p.add_argument("host")
+    p.add_argument("--ports", help="Port range (e.g. 1-1024) or comma-separated")
+    p.add_argument("--common", action="store_true", help="Scan common ports only")
+    p.add_argument("--timeout", type=float, default=1)
+    p.add_argument("--threads", type=int, default=50)
+    args = p.parse_args()
+    if args.common:
+        ports = sorted(COMMON_PORTS.keys())
+    elif args.ports:
+        if "-" in args.ports:
+            start, end = map(int, args.ports.split("-"))
+            ports = range(start, end + 1)
+        else:
+            ports = [int(p) for p in args.ports.split(",")]
+    else:
+        ports = sorted(COMMON_PORTS.keys())
+    t0 = time.time()
     open_ports = []
-    for port in ports:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout); result = s.connect_ex((host, port)); s.close()
-            if result == 0: open_ports.append(port)
-        except: pass
-    return open_ports
-def cli():
-    if len(sys.argv) < 2: print("Usage: port_scan <host> [port1,port2|common|1-1024]"); sys.exit(1)
-    host = sys.argv[1]
-    if len(sys.argv) > 2:
-        arg = sys.argv[2]
-        if "-" in arg: lo, hi = map(int, arg.split("-")); ports = range(lo, hi+1)
-        elif "," in arg: ports = [int(p) for p in arg.split(",")]
-        else: ports = [int(arg)]
-    else: ports = COMMON.keys()
-    print(f"Scanning {host}...")
-    for p in scan(host, ports):
-        svc = COMMON.get(p, "?"); print(f"  {p:>5}/tcp  OPEN  {svc}")
-if __name__ == "__main__": cli()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.threads) as ex:
+        futures = {ex.submit(scan_port, args.host, port, args.timeout): port for port in ports}
+        for f in concurrent.futures.as_completed(futures):
+            port, is_open = f.result()
+            if is_open:
+                open_ports.append({"port": port, "service": COMMON_PORTS.get(port, "unknown"), "state": "open"})
+    open_ports.sort(key=lambda x: x["port"])
+    print(json.dumps({"host": args.host, "scanned": len(ports), "open": len(open_ports), "elapsed_ms": round((time.time()-t0)*1000), "ports": open_ports}, indent=2))
+
+if __name__ == "__main__": main()
